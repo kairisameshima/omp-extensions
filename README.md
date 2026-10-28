@@ -1,6 +1,6 @@
 # omp extensions
 
-A CodeBuild watcher for [oh-my-pi](https://github.com/can1357/oh-my-pi). It shows the build status, current phase, elapsed time, and latest eight CloudWatch log lines in a panel above the editor. Watches run in the background, so you and the agent can keep working.
+Live AWS watcher cards for [oh-my-pi](https://github.com/can1357/oh-my-pi): CodeBuild logs, CloudFormation stack events for CDK deployments, and CodePipeline execution progress. Cards appear above the editor and run in the background, so you and the agent can keep working.
 
 ## Install
 
@@ -10,7 +10,7 @@ Requires omp (verified with 18.13.3), Git, and the AWS CLI on your `PATH`.
 omp plugin install github:kairisameshima/omp-extensions
 ```
 
-Restart omp after installing. The package registers the `/cbwatch` command and the `codebuild_watch` tool. No separate npm install or build step is needed. omp provides the extension's `@oh-my-pi/pi-tui` import.
+Restart omp after installing. The package registers `/cbwatch`, `/cfnwatch`, and `/cpwatch`, plus the `codebuild_watch`, `cloudformation_watch`, and `codepipeline_watch` tools. No separate npm install or build step is needed. omp provides the extension's runtime imports.
 
 If you already have a standalone `codebuild-watch.ts` in `~/.omp/agent/extensions/` or a project's `.omp/extensions/`, move it outside the extensions directory before restarting to avoid duplicate registrations.
 
@@ -32,7 +32,7 @@ Linked checkouts use local source changes directly and do not support `plugin up
 
 ## AWS access
 
-The watcher uses your AWS CLI credentials and region configuration, including environment variables such as `AWS_PROFILE` and `AWS_REGION`. Unlike the original local extension, it does not default to the `shared` profile or `us-east-1`. Pass `--profile` and `--region` to override your configuration for a watch.
+The watchers use your AWS CLI credentials and region configuration, including environment variables such as `AWS_PROFILE` and `AWS_REGION`. Pass `--profile` and `--region` to override your configuration for a watch.
 
 For SSO profiles, authenticate first:
 
@@ -41,6 +41,8 @@ aws sso login --profile engineering
 ```
 
 Your identity needs `codebuild:BatchGetBuilds` and `logs:GetLogEvents` for the watched build and its CloudWatch log stream. Watching by project also requires `codebuild:ListBuildsForProject`. The watcher only reads AWS resources.
+
+CloudFormation watches require `cloudformation:DescribeStacks` and `cloudformation:DescribeStackEvents`. CodePipeline watches require `codepipeline:ListPipelineExecutions` when selecting the newest execution, plus `codepipeline:GetPipelineExecution` and `codepipeline:ListActionExecutions`.
 
 ## Usage
 
@@ -64,7 +66,32 @@ Wait for a build matching a commit SHA prefix:
 
 You can also ask the agent to watch a build. Its `codebuild_watch` tool accepts `build_id`, or `project` with an optional `source_version` SHA prefix, plus optional `profile` and `region` overrides.
 
-## Behavior and limits
+### CDK and CloudFormation
+
+Watch the deployed CloudFormation stack name or stack ARN:
+
+```text
+/cfnwatch my-app-stack --profile engineering --region us-west-2
+```
+
+The card shows stack status and the eight newest resource events, including failure reasons. For CDK, use the deployed stack name, not a construct path. The watcher observes CloudFormation only. It does not launch `cdk deploy` or monitor local synthesis and asset uploads. Start one watch per stack.
+
+The `cloudformation_watch` tool accepts `stack`, plus optional `profile` and `region`. A stack that does not exist yet is watched until it appears. Once found, its stack ID is pinned. An existing stack already in a terminal state completes immediately, so start the watch after the update begins when reusing a stack. Rollback completion is reported as a failed deployment, not success.
+
+### CodePipeline
+
+Watch the newest execution, or pin a specific execution:
+
+```text
+/cpwatch my-pipeline --profile engineering --region us-west-2
+/cpwatch my-pipeline 00000000-0000-0000-0000-000000000000
+```
+
+The card shows the selected execution's stage and action statuses. The `codepipeline_watch` tool accepts `pipeline`, optional `execution_id`, and optional `profile` and `region`. Without an execution ID, it waits for an execution if none exists, then pins the newest one. It does not switch to newer runs. Final results include failed action details.
+
+Both new watchers poll every five seconds and stop after two hours from starting the watch. AWS errors appear in the card while polling continues. Their panel keys include profile and region. When finished, they remove the live card and post a result message. Agent-started watches wake an idle agent, while slash-command watches do not.
+
+## CodeBuild behavior and limits
 
 The watcher polls every five seconds and stops watching after two hours. Project watches search the ten newest builds. A commit watch keeps polling until a matching build appears. Distinct build IDs or project/SHA targets can be watched together. Avoid starting the same target twice, including in different accounts or regions, because its panel key does not include the AWS profile or region.
 
