@@ -1,0 +1,18 @@
+{
+  "name": "@kairisameshima/omp-extensions",
+  "version": "0.1.0",
+  "description": "CodeBuild watcher extension for oh-my-pi",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kairisameshima/omp-extensions.git"
+  },
+  "files": [
+    "extensions/codebuild-watch.ts"
+  ],
+  "omp": {
+    "extensions": [
+      "./extensions/codebuild-watch.ts"
+    ]
+  }
+}
